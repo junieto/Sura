@@ -1,0 +1,12 @@
+trigger:
+  - main
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+steps:
+- script: |
+    cd src
+    pip install -r requirements.txt
+    pytest tests/
+  displayName: 'Run tests'

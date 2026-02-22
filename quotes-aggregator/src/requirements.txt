@@ -1,0 +1,9 @@
+Flask==2.3.3
+Flask-CORS==4.0.0
+prometheus-flask-exporter==0.22.4
+redis==5.0.1
+requests==2.31.0
+tenacity==8.2.3
+circuitbreaker==1.4.0
+gunicorn==21.2.0
+python-dotenv==1.0.0
