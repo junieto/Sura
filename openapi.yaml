@@ -1,0 +1,478 @@
+openapi: 3.0.0
+info:
+  title: Quotes API
+  description: API for creating and managing inspirational quotes with idempotency support
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@quotesapi.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.quotes.com/v1
+    description: Production server
+  - url: https://staging-api.quotes.com/v1
+    description: Staging server
+
+tags:
+  - name: Quotes
+    description: Operations related to quotes management
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT token obtained from authentication service
+    apiKey:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Legacy API key authentication (use bearerAuth for new integrations)
+
+  schemas:
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Error code identifier
+          example: "VALIDATION_ERROR"
+        message:
+          type: string
+          description: Human-readable error message
+          example: "Invalid input data"
+        details:
+          type: array
+          description: Detailed error information
+          items:
+            type: object
+            properties:
+              field:
+                type: string
+                example: "content"
+              issue:
+                type: string
+                example: "must not be empty"
+        timestamp:
+          type: string
+          format: date-time
+          description: When the error occurred
+          example: "2024-01-15T10:30:00Z"
+        requestId:
+          type: string
+          description: Unique request identifier for tracing
+          example: "req_123abc"
+
+    QuoteRequest:
+      type: object
+      required:
+        - content
+        - author
+      properties:
+        content:
+          type: string
+          description: The quote text
+          minLength: 3
+          maxLength: 500
+          example: "The only way to do great work is to love what you do."
+        author:
+          type: string
+          description: The person who said/wrote the quote
+          minLength: 2
+          maxLength: 100
+          example: "Steve Jobs"
+        category:
+          type: string
+          description: Quote category/topic
+          enum:
+            - inspiration
+            - wisdom
+            - success
+            - love
+            - life
+            - business
+            - technology
+          example: "inspiration"
+        tags:
+          type: array
+          description: Custom tags for the quote
+          maxItems: 10
+          items:
+            type: string
+            minLength: 2
+            maxLength: 30
+            pattern: "^[a-zA-Z0-9_-]+$"
+          example: ["innovation", "passion", "work"]
+        language:
+          type: string
+          description: ISO 639-1 language code
+          default: "en"
+          pattern: "^[a-z]{2}$"
+          example: "en"
+
+    QuoteResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique quote identifier
+          example: "123e4567-e89b-12d3-a456-426614174000"
+        content:
+          type: string
+          example: "The only way to do great work is to love what you do."
+        author:
+          type: string
+          example: "Steve Jobs"
+        category:
+          type: string
+          example: "inspiration"
+        tags:
+          type: array
+          items:
+            type: string
+          example: ["innovation", "passion", "work"]
+        language:
+          type: string
+          example: "en"
+        createdAt:
+          type: string
+          format: date-time
+          description: When the quote was created
+          example: "2024-01-15T10:30:00Z"
+        createdBy:
+          type: string
+          format: uuid
+          description: User ID who created the quote
+          example: "user_123abc"
+        version:
+          type: integer
+          description: Quote version for optimistic concurrency
+          example: 1
+
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: "^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$"
+        minLength: 36
+        maxLength: 36
+      description: |
+        Unique idempotency key (UUID v4) to ensure safe retries.
+        The same key with the same request body will return the same quote without creating duplicates.
+        Idempotency keys expire after 24 hours.
+
+  responses:
+    ValidationError:
+      description: Validation error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "VALIDATION_ERROR"
+            message: "Invalid request payload"
+            details:
+              - field: "content"
+                issue: "must not be empty"
+              - field: "author"
+                issue: "must not be empty"
+            timestamp: "2024-01-15T10:30:00Z"
+            requestId: "req_123abc"
+
+    UnauthorizedError:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "UNAUTHORIZED"
+            message: "Missing or invalid authentication token"
+            timestamp: "2024-01-15T10:30:00Z"
+            requestId: "req_123abc"
+
+    ForbiddenError:
+      description: Insufficient permissions
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "FORBIDDEN"
+            message: "Insufficient permissions to perform this action"
+            timestamp: "2024-01-15T10:30:00Z"
+            requestId: "req_123abc"
+
+    ConflictError:
+      description: Conflict with existing resource
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "IDEMPOTENCY_KEY_CONFLICT"
+            message: "Idempotency key already used with different request body"
+            timestamp: "2024-01-15T10:30:00Z"
+            requestId: "req_123abc"
+
+    TooManyRequestsError:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+          example:
+            code: "RATE_LIMIT_EXCEEDED"
+            message: "Too many requests, please try again later"
+            timestamp: "2024-01-15T10:30:00Z"
+            requestId: "req_123abc"
+
+paths:
+  /api/quotes:
+    post:
+      tags:
+        - Quotes
+      summary: Create a new quote
+      description: |
+        Creates a new inspirational quote with idempotency support.
+        The endpoint ensures that duplicate requests with the same idempotency key
+        and request body return the same quote without creating duplicates.
+        
+        **Idempotency Behavior:**
+        - First request with a new idempotency key: Creates a new quote
+        - Subsequent requests with same key and same body: Returns the previously created quote (HTTP 200)
+        - Request with same key but different body: Returns 409 Conflict
+        - Keys expire after 24 hours
+        
+        **Rate Limits:**
+        - 10 requests per second per API key
+        - 1000 requests per day per user
+      operationId: createQuote
+      security:
+        - bearerAuth: []
+        - apiKey: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuoteRequest'
+            examples:
+              basic:
+                summary: Basic quote creation
+                value:
+                  content: "The only way to do great work is to love what you do."
+                  author: "Steve Jobs"
+                  category: "inspiration"
+                  language: "en"
+              withTags:
+                summary: Quote with custom tags
+                value:
+                  content: "Innovation distinguishes between a leader and a follower."
+                  author: "Steve Jobs"
+                  category: "innovation"
+                  tags: ["leadership", "technology", "future"]
+                  language: "en"
+      responses:
+        '201':
+          description: Quote created successfully
+          headers:
+            Location:
+              description: URL of the created quote
+              schema:
+                type: string
+                format: uri
+                example: "https://api.quotes.com/v1/api/quotes/123e4567-e89b-12d3-a456-426614174000"
+            Idempotency-Key-Status:
+              description: Status of the idempotency key
+              schema:
+                type: string
+                enum: [CREATED, REUSED]
+                example: "CREATED"
+            X-RateLimit-Remaining:
+              description: Number of requests remaining in the current rate limit window
+              schema:
+                type: integer
+                example: 999
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+              examples:
+                response:
+                  value:
+                    id: "123e4567-e89b-12d3-a456-426614174000"
+                    content: "The only way to do great work is to love what you do."
+                    author: "Steve Jobs"
+                    category: "inspiration"
+                    tags: []
+                    language: "en"
+                    createdAt: "2024-01-15T10:30:00Z"
+                    createdBy: "user_123abc"
+                    version: 1
+        '200':
+          description: Existing quote returned (idempotent replay)
+          headers:
+            Idempotency-Key-Status:
+              description: Status of the idempotency key
+              schema:
+                type: string
+                enum: [REUSED]
+                example: "REUSED"
+            X-RateLimit-Remaining:
+              description: Number of requests remaining in the current rate limit window
+              schema:
+                type: integer
+                example: 998
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+        '400':
+          $ref: '#/components/responses/ValidationError'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '409':
+          $ref: '#/components/responses/ConflictError'
+        '422':
+          description: Business logic validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: "BUSINESS_VALIDATION_ERROR"
+                message: "Quote violates business rules"
+                details:
+                  - field: "author"
+                    issue: "Author has been blocked due to content policy violations"
+                timestamp: "2024-01-15T10:30:00Z"
+                requestId: "req_123abc"
+        '429':
+          $ref: '#/components/responses/TooManyRequestsError'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: "INTERNAL_ERROR"
+                message: "An unexpected error occurred"
+                timestamp: "2024-01-15T10:30:00Z"
+                requestId: "req_123abc"
+
+  /api/quotes/{quoteId}:
+    get:
+      tags:
+        - Quotes
+      summary: Get a quote by ID
+      description: Retrieves a specific quote using its unique identifier
+      operationId: getQuoteById
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: quoteId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: UUID of the quote to retrieve
+          example: "123e4567-e89b-12d3-a456-426614174000"
+      responses:
+        '200':
+          description: Quote retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/QuoteResponse'
+        '401':
+          $ref: '#/components/responses/UnauthorizedError'
+        '403':
+          $ref: '#/components/responses/ForbiddenError'
+        '404':
+          description: Quote not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+              example:
+                code: "NOT_FOUND"
+                message: "Quote with ID 123e4567-e89b-12d3-a456-426614174000 not found"
+                timestamp: "2024-01-15T10:30:00Z"
+                requestId: "req_123abc"
+
+security:
+  - bearerAuth: []
+
+x-webhooks:
+  quoteCreated:
+    post:
+      summary: Webhook for quote creation events
+      description: |
+        When a new quote is created, this webhook will be triggered.
+        Subscribers must respond with 2xx to acknowledge receipt.
+      operationId: webhookQuoteCreated
+      parameters:
+        - name: webhook-signature
+          in: header
+          required: true
+          schema:
+            type: string
+          description: HMAC-SHA256 signature for webhook verification
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                event:
+                  type: string
+                  enum: [quote.created]
+                  example: "quote.created"
+                timestamp:
+                  type: string
+                  format: date-time
+                  example: "2024-01-15T10:30:00Z"
+                data:
+                  $ref: '#/components/schemas/QuoteResponse'
+      responses:
+        '200':
+          description: Webhook acknowledged
+        '202':
+          description: Webhook accepted for processing
+        '400':
+          description: Invalid webhook payload
+        '401':
+          description: Invalid signature
+
+x-rate-limits:
+  createQuote:
+    perSecond: 10
+    perDay: 1000
+    perUser: 100
+    description: Rate limits for quote creation endpoint
+
+x-tags:
+  - name: Quotes
+    description: Everything about quotes
+    externalDocs:
+      description: Find out more about quotes
+      url: https://docs.quotes.com

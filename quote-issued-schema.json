@@ -1,0 +1,64 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://api.quotes.com/events/quote-issued/v1",
+  "title": "QuoteIssuedEvent",
+  "description": "Event emitted when a quote is created",
+  "type": "object",
+  "required": ["eventId", "eventType", "timestamp", "data"],
+  "properties": {
+    "eventId": {
+      "type": "string",
+      "description": "Unique event identifier",
+      "format": "uuid",
+      "example": "123e4567-e89b-12d3-a456-426614174000"
+    },
+    "eventType": {
+      "type": "string",
+      "enum": ["QuoteIssued"],
+      "example": "QuoteIssued"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "example": "2024-01-15T10:30:00Z"
+    },
+    "data": {
+      "type": "object",
+      "required": ["quoteId", "content", "author", "createdAt", "userId"],
+      "properties": {
+        "quoteId": {
+          "type": "string",
+          "format": "uuid",
+          "example": "123e4567-e89b-12d3-a456-426614174000"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 3,
+          "maxLength": 500,
+          "example": "The only way to do great work is to love what you do."
+        },
+        "author": {
+          "type": "string",
+          "minLength": 2,
+          "maxLength": 100,
+          "example": "Steve Jobs"
+        },
+        "category": {
+          "type": "string",
+          "enum": ["inspiration", "wisdom", "success", "love", "life", "business", "technology"],
+          "example": "inspiration"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "example": "2024-01-15T10:30:00Z"
+        },
+        "userId": {
+          "type": "string",
+          "format": "uuid",
+          "example": "user-123-456"
+        }
+      }
+    }
+  }
+}

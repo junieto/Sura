@@ -1,0 +1,13 @@
+quotes-aggregator/
+├── src/
+│   ├── app.py              # Main Flask application
+│   ├── requirements.txt     # Python dependencies
+│   ├── config.py           # Configuration
+│   └── Dockerfile          # Container definition
+├── k8s/
+│   ├── deployment.yaml     # Kubernetes deployment
+│   ├── service.yaml        # Kubernetes service
+│   ├── configmap.yaml      # Configuration
+│   └── secrets.yaml        # Secrets (template)
+├── azure-pipelines.yml     # Azure DevOps pipeline
+└── README.md               # Documentation
